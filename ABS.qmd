@@ -1,0 +1,144 @@
+---
+title: "Untitled"
+format: html
+editor: visual
+---
+
+```{r}
+library(igraph)
+library(dplyr)
+library(ggplot2)
+
+```
+
+## **تعریف شبکه جاده**
+
+```{r}
+set.seed(123)
+nodes <- 1:10  # 10 تقاطع
+edges <- data.frame(
+  from = sample(nodes, 20, replace = TRUE),
+  to = sample(nodes, 20, replace = TRUE),
+  capacity = sample(10:50, 20, replace = TRUE),  # ظرفیت هر جاده
+  base_time = sample(5:20, 20, replace = TRUE)  # زمان سفر پایه بدون ترافیک
+)
+edges <- edges %>% filter(from != to)  # حذف حلقه‌های خود به خودی
+
+# ایجاد گراف
+road_network <- graph_from_data_frame(edges, directed = TRUE)
+
+# تجسم گراف
+plot(road_network, edge.label = E(road_network)$base_time, main = "شبکه جاده")
+
+```
+
+## **تابع شبیه‌سازی ترافیک**
+
+```{r}
+simulate_traffic <- function(graph, n_agents, n_steps, alpha = 0.1) {
+  agents <- data.frame(
+    id = 1:n_agents,
+    origin = sample(V(graph)$name, n_agents, replace = TRUE),
+    destination = sample(V(graph)$name, n_agents, replace = TRUE)
+  )
+  
+  agents <- agents %>% filter(origin != destination)  # حذف مسیرهای نامعتبر
+  
+  # مقداردهی اولیه ترافیک در یال‌ها
+  E(graph)$traffic <- 0
+  print("تعداد خودروها و مسیرهای نامعتبر:")
+  print(nrow(agents))
+  
+  for (step in 1:n_steps) {
+    print(paste("مرحله:", step))
+    for (i in 1:nrow(agents)) {
+      origin <- agents$origin[i]
+      destination <- agents$destination[i]
+      
+      # محاسبه کوتاه‌ترین مسیر بر اساس زمان‌های سفر فعلی
+      E(graph)$weight <- E(graph)$base_time * (1 + alpha * E(graph)$traffic / E(graph)$capacity)
+      path <- shortest_paths(graph, from = origin, to = destination, output = "vpath")$vpath[[1]]
+      
+      if (length(path) > 1) {
+        # به‌روزرسانی ترافیک در طول مسیر
+        for (j in 1:(length(path) - 1)) {
+          edge <- get.edge.ids(graph, c(path[j], path[j + 1]))
+          E(graph)$traffic[edge] <- E(graph)$traffic[edge] + 1
+        }
+      }
+    }
+    
+    # کاهش ترافیک پس از هر مرحله
+    E(graph)$traffic <- pmax(0, E(graph)$traffic - 1)
+    print(paste("ترافیک پس از مرحله", step, ":", toString(E(graph)$traffic)))
+  }
+  
+  return(graph)
+}
+
+```
+
+## **اجرای شبیه‌سازی**
+
+```{r}
+n_agents <- 50  # تعداد خودروها
+n_steps <- 10   # تعداد مراحل زمانی
+simulated_graph <- simulate_traffic(road_network, n_agents, n_steps)
+
+# تجسم توزیع ترافیک
+plot(simulated_graph, edge.label = E(simulated_graph)$traffic, main = "ترافیک پس از شبیه‌سازی")
+print("شبیه‌سازی ترافیک انجام شد.")
+
+```
+
+## **تحلیل نتایج**
+
+```{r}
+traffic_data <- data.frame(
+  edge_id = 1:ecount(simulated_graph),
+  from = ends(simulated_graph, 1:ecount(simulated_graph))[, 1],
+  to = ends(simulated_graph, 1:ecount(simulated_graph))[, 2],
+  traffic = E(simulated_graph)$traffic
+)
+
+# نمایش داده‌های ترافیک در یال‌ها
+print("داده‌های ترافیک در یال‌ها:")
+print(traffic_data)
+
+ggplot(traffic_data, aes(x = factor(edge_id), y = traffic)) +
+  geom_bar(stat = "identity", fill = "blue") +
+  labs(title = "ترافیک در هر یال", x = "شناسه یال", y = "ترافیک") +
+  theme_minimal()
+
+```
+
+## **تحلیل حساسیت**
+
+```{r}
+sensitivity_analysis <- function(graph, n_agents, n_steps, alphas) {
+  results <- data.frame()
+  
+  for (alpha in alphas) {
+    simulated_graph <- simulate_traffic(graph, n_agents, n_steps, alpha)
+    avg_traffic <- mean(E(simulated_graph)$traffic)
+    results <- rbind(results, data.frame(alpha = alpha, avg_traffic = avg_traffic))
+    
+    print(paste("آلفا:", alpha, "- میانگین ترافیک:", avg_traffic))
+  }
+  
+  return(results)
+}
+
+# انجام تحلیل حساسیت
+alphas <- seq(0.05, 0.3, by = 0.05)
+results <- sensitivity_analysis(road_network, n_agents, n_steps, alphas)
+
+ggplot(results, aes(x = alpha, y = avg_traffic)) +
+  geom_line(color = "red") +
+  geom_point(size = 3) +
+  labs(title = "تحلیل حساسیت جریان ترافیک", x = "آلفا (فاکتور تأثیر ترافیک)", y = "میانگین ترافیک") +
+  theme_minimal()
+
+print("تحلیل حساسیت انجام شد.")
+
+```
