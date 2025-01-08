@@ -1,0 +1,105 @@
+---
+
+title: "Game"
+format: html
+editor: visual
+---
+
+```{r}
+library(quarto)
+quarto_render("H:/داده کاوی/Game.qmd")
+
+```
+
+# تعریف هزینه‌ها و زمان‌ها
+
+```{r}
+# تعریف هزینه‌ها و زمان‌ها
+cost_matrix <- matrix(c(50, 60, 80,   # هزینه از A به X, Y, Z
+                       70, 50, 90,   # هزینه از B به X, Y, Z
+                       90, 80, 60),  # هزینه از C به X, Y, Z
+                     nrow = 3, byrow = TRUE)
+print(cost_matrix)
+
+rownames(cost_matrix) <- c("A", "B", "C")
+colnames(cost_matrix) <- c("X", "Y", "Z")
+
+time_matrix <- matrix(c(10, 12, 15,   # زمان از A به X, Y, Z
+                        12, 10, 18,   # زمان از B به X, Y, Z
+                        14, 13, 11),  # زمان از C به X, Y, Z
+                      nrow = 3, byrow = TRUE)
+print(time_matrix)
+
+```
+
+# حل برنامه‌ریزی خطی
+
+```{r}
+# کتابخانه lpSolve برای حل برنامه‌ریزی خطی
+library(lpSolve)
+
+# تعداد بازیکنان (شرکت‌های حمل‌ونقل) و تعداد استراتژی‌ها (مسیرها)
+num_players <- 3
+num_strategies <- 3  # مسیرهای مختلف (دریایی، جاده‌ای، ریلی)
+
+# تابع هدف: کمینه کردن هزینه‌ها
+objective_function <- as.vector(cost_matrix)
+
+# محدودیت‌های زمان (زمان‌های حمل‌ونقل)
+constraint_matrix <- matrix(time_matrix, nrow = num_players, byrow = TRUE)
+
+# حل مدل تعادل نش
+result <- lp("min", 
+             objective.in = objective_function,
+             const.mat = constraint_matrix, 
+             const.dir = rep("<=", num_players), 
+             const.rhs = c(300, 300, 300), 
+             compute.sens = TRUE)
+
+# نمایش نتایج
+print(result)
+
+```
+
+# تحلیل حساسیت
+
+```{r}
+# بررسی حساسیت نسبت به تغییرات در هزینه‌ها
+sensitivity_cost <- result$duals
+print("حساسیت هزینه‌ها:")
+print(sensitivity_cost)
+
+# بررسی حساسیت نسبت به تغییرات در زمان‌ها
+sensitivity_time <- result$duals.from
+print("حساسیت زمان‌ها:")
+print(sensitivity_time)
+
+
+```
+
+# نتایج و گراف‌ها
+
+```{r}
+library(ggplot2)
+
+# ساخت داده‌های برای نمایش در گراف
+df <- data.frame(
+  Start = rep(c("A", "B", "C"), each = num_strategies),
+  End = rep(c("X", "Y", "Z"), times = num_players),
+  Cost = as.vector(cost_matrix),
+  Time = as.vector(time_matrix)
+)
+
+# نمایش گراف هزینه‌ها
+ggplot(df, aes(x = Start, y = End, fill = Cost)) +
+  geom_tile() +
+  labs(title = "ماتریس هزینه‌ها", x = "نقاط شروع", y = "مقصدها") +
+  scale_fill_gradient(low = "blue", high = "red")
+
+# نمایش گراف زمان‌ها
+ggplot(df, aes(x = Start, y = End, fill = Time)) +
+  geom_tile() +
+  labs(title = "ماتریس زمان‌ها", x = "نقاط شروع", y = "مقصدها") +
+  scale_fill_gradient(low = "green", high = "orange")
+
+```
